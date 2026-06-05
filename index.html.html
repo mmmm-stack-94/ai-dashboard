@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 基建產業研究 Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #efefec;
+    --text: #1a1a18; --text2: #6b6b67; --text3: #9b9b96;
+    --border: rgba(0,0,0,0.1); --border2: rgba(0,0,0,0.18);
+    --info-bg: #e6f1fb; --info-text: #185fa5;
+    --warn-bg: #faeeda; --warn-text: #854f0b;
+    --green: #1d9e75; --red: #d85a30; --blue: #378add;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --bg2: #252523; --bg3: #2e2e2b;
+      --text: #f0f0ec; --text2: #a0a09a; --text3: #68685e;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.18);
+      --info-bg: #0c447c; --info-text: #b5d4f4;
+      --warn-bg: #633806; --warn-text: #fac775;
+      --green: #5dcaa5; --red: #f0997b; --blue: #85b7eb;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: var(--bg3); color: var(--text); font-size: 14px; }
+  .shell { max-width: 1200px; margin: 0 auto; background: var(--bg);
+           min-height: 100vh; border-left: 0.5px solid var(--border);
+           border-right: 0.5px solid var(--border); }
+
+  .top-bar { padding: 1rem 1.5rem; border-bottom: 0.5px solid var(--border);
+             display: flex; align-items: center; justify-content: space-between;
+             flex-wrap: wrap; gap: 10px; }
+  .brand h1 { font-size: 18px; font-weight: 600; }
+  .brand p  { font-size: 12px; color: var(--text2); margin-top: 2px;
+              display: flex; align-items: center; gap: 6px; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%;
+              background: var(--green); display: inline-block; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { font-size: 12px; padding: 6px 14px; border-radius: var(--radius);
+           border: 0.5px solid var(--border2); background: var(--bg);
+           color: var(--text); cursor: pointer; display: inline-flex;
+           align-items: center; gap: 5px; transition: background .15s; }
+  button:hover { background: var(--bg2); }
+  button.active { background: var(--info-bg); color: var(--info-text); border-color: transparent; }
+  button.primary { background: var(--blue); color: #fff; border-color: transparent; }
+  button.primary:hover { opacity: .9; }
+
+  .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px;
+           padding: 1rem 1.5rem; border-bottom: 0.5px solid var(--border); }
+  .stat { background: var(--bg2); border-radius: var(--radius); padding: 10px 14px; }
+  .stat-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+  .stat-val { font-size: 24px; font-weight: 600; }
+
+  .sec-bar { display: flex; gap: 6px; padding: .75rem 1.5rem;
+             border-bottom: 0.5px solid var(--border); flex-wrap: wrap; }
+  .chip { font-size: 11px; padding: 4px 12px; border-radius: 20px;
+          border: 0.5px solid var(--border); cursor: pointer;
+          color: var(--text2); background: var(--bg); white-space: nowrap;
+          transition: all .15s; }
+  .chip:hover, .chip.active { background: var(--bg2); color: var(--text);
+                               border-color: var(--border2); }
+
+  .search-row { padding: .75rem 1.5rem; border-bottom: 0.5px solid var(--border); }
+  .search-row input { width: 100%; padding: 7px 12px; border-radius: var(--radius);
+                      border: 0.5px solid var(--border); background: var(--bg2);
+                      color: var(--text); font-size: 13px; outline: none; }
+  .search-row input:focus { border-color: var(--blue); }
+
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { padding: 9px 12px; text-align: left; font-weight: 500; font-size: 11px;
+             color: var(--text2); border-bottom: 0.5px solid var(--border);
+             white-space: nowrap; cursor: pointer; user-select: none;
+             background: var(--bg); position: sticky; top: 0; }
+  thead th:hover { color: var(--text); }
+  thead th.asc::after  { content: " ↑"; }
+  thead th.desc::after { content: " ↓"; }
+  tbody tr { border-bottom: 0.5px solid var(--border); transition: background .1s; }
+  tbody tr:hover { background: var(--bg2); }
+  td { padding: 9px 12px; white-space: nowrap; }
+  .t1r { background: rgba(250,199,117,.1); }
+  .t1r:hover { background: rgba(250,199,117,.18) !important; }
+
+  .tb { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
+  .t1b { background: var(--warn-bg); color: var(--warn-text); }
+  .t2b { background: var(--info-bg); color: var(--info-text); }
+  .conf { font-size: 10px; padding: 1px 5px; border-radius: 3px;
+          background: #fac775; color: #633806; font-weight: 500; margin-left: 4px; }
+  .sbar { display: inline-block; width: 50px; height: 5px; border-radius: 3px;
+          background: var(--bg3); vertical-align: middle; margin-left: 6px; overflow: hidden; }
+  .sbar-f { height: 100%; border-radius: 3px; background: var(--blue); }
+  .tech-b { color: var(--green); font-size: 11px; font-weight: 500; }
+  .tech-s { color: var(--red);   font-size: 11px; font-weight: 500; }
+  .tech-n { color: var(--text3); font-size: 11px; }
+
+  .loading { padding: 3rem; text-align: center; color: var(--text2); }
+  .spin { display: inline-block; width: 20px; height: 20px;
+          border: 2px solid var(--border2); border-top-color: var(--blue);
+          border-radius: 50%; animation: sp .8s linear infinite;
+          vertical-align: middle; margin-right: 8px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .err { margin: 1rem 1.5rem; padding: 1rem 1.25rem; border-radius: var(--radius);
+         background: #fcebeb; color: #a32d2d; font-size: 13px; line-height: 1.7; border: 0.5px solid #f09595; }
+  .empty { padding: 2rem; text-align: center; color: var(--text3); }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: repeat(2,1fr); }
+    .top-bar { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="top-bar">
+    <div class="brand">
+      <h1>AI 基建產業研究</h1>
+      <p id="sub"><span class="spin"></span>連接 Google Sheets...</p>
+    </div>
+    <div class="controls">
+      <button class="active" onclick="setTier('all',this)">全部</button>
+      <button onclick="setTier('1',this)"><span class="tb t1b">T1</span> 主要供應商</button>
+      <button onclick="setTier('2',this)"><span class="tb t2b">T2</span> 次要供應商</button>
+      <button onclick="loadData()">&#8635; 重新整理</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">追蹤個股</div><div class="stat-val" id="s-n">—</div></div>
+    <div class="stat"><div class="stat-label">平均總分</div><div class="stat-val" id="s-avg">—</div></div>
+    <div class="stat"><div class="stat-label">T1 確認</div><div class="stat-val" id="s-t1">—</div></div>
+    <div class="stat"><div class="stat-label">更新時間</div><div class="stat-val" id="s-ts" style="font-size:16px">—</div></div>
+  </div>
+
+  <div class="sec-bar" id="sec-bar">
+    <div class="chip active" onclick="setSec('all',this)">全部產業</div>
+  </div>
+
+  <div class="search-row">
+    <input id="q" type="text" placeholder="🔍 搜尋名稱或代號..." oninput="render()">
+  </div>
+
+  <div id="loading" class="loading"><span class="spin"></span>載入資料中，請稍候...</div>
+  <div id="err" style="display:none"></div>
+
+  <div class="tbl-wrap" id="tbl-wrap" style="display:none">
+    <table>
+      <thead><tr>
+        <th onclick="sort('name')">名稱</th>
+        <th onclick="sort('code')">代號</th>
+        <th onclick="sort('sector')">產業</th>
+        <th onclick="sort('tier')">Tier</th>
+        <th onclick="sort('score')">總分</th>
+        <th onclick="sort('price')">股價</th>
+        <th onclick="sort('pe')">TTM P/E</th>
+        <th onclick="sort('gm')">毛利率</th>
+        <th onclick="sort('eps')">EPS 近4Q</th>
+        <th>技術面</th>
+      </tr></thead>
+      <tbody id="tbl"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+const CSV_URL = "https://docs.google.com/spreadsheets/d/1ONTKDdNcXo-TVJHQQAvrFtiKU_XOzTGJcext3GxSjrE/export?format=csv&gid=619957500";
+const CONFIRMED = new Set(['2317','1513','2327','3017','3324','2404','6139','1519','2308','5274',
+  'NVDA','2330','2368','3037','2383','2492','ASML','AMAT','FLEX','2481','5425','3707','2455','6488']);
+
+let DATA = [], tierF = 'all', secF = 'all', sortK = 'score', sortD = -1;
+
+function loadData() {
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('tbl-wrap').style.display = 'none';
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('sub').innerHTML = '<span class="spin"></span>連接 Google Sheets...';
+
+  Papa.parse(CSV_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete(res) {
+      try {
+        DATA = res.data.map(r => ({
+          name:   s(r['名稱']),
+          code:   s(r['代號']),
+          sector: s(r['類別']),
+          tier:   parseInt(r['TIER'] || r['Tier'] || 0),
+          score:  n(r['總分']),
+          price:  n(r['當日股價']),
+          d5:     n(r['五日線']),
+          d10:    n(r['十日線']),
+          d20:    n(r['月線']),
+          pe:     n(r['TTM']),
+          gm:     n(r['最新  單季  毛利  率  (%)']),
+          eps:    n(r['最新  近4Q  每股  盈餘  (元)']),
+        })).filter(r => r.name && (r.tier === 1 || r.tier === 2) && r.score > 0);
+
+        if (!DATA.length) throw new Error('篩選後無資料，請確認工作表欄位名稱正確');
+        buildSecs();
+        render();
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('tbl-wrap').style.display = 'block';
+        const now = new Date();
+        document.getElementById('s-ts').textContent =
+          (now.getMonth()+1) + '/' + now.getDate() + ' ' +
+          now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
+        document.getElementById('sub').innerHTML =
+          '<span class="live-dot"></span> 即時資料 · Google Sheets 同步 · ' + DATA.length + ' 筆';
+      } catch(e) { showErr('資料解析失敗：' + e.message); }
+    },
+    error(e) {
+      showErr('無法連接 Google Sheets：' + (e.message || '未知錯誤') +
+        '<br><br>請確認：<br>1. 試算表已設定「知道連結的任何人 → 檢視者」<br>2. 網路連線正常');
+    }
+  });
+}
+
+const s = v => String(v || '').trim();
+const n = v => parseFloat(String(v || '').replace(/[^\d.\-]/g, '')) || 0;
+
+function tech(r) {
+  if (!r.price || !r.d5) return '<span class="tech-n">— 無資料</span>';
+  if (r.price > r.d5 && r.d5 > r.d10 && r.d10 > r.d20) return '<span class="tech-b">▲ 多頭</span>';
+  if (r.price < r.d5 && r.d5 < r.d10) return '<span class="tech-s">▼ 空頭</span>';
+  return '<span class="tech-n">— 整理</span>';
+}
+
+function getRows() {
+  const q = (document.getElementById('q') || {}).value.toLowerCase() || '';
+  return DATA.filter(r => {
+    if (tierF !== 'all' && String(r.tier) !== tierF) return false;
+    if (secF  !== 'all' && r.sector !== secF)         return false;
+    if (q && !r.name.includes(q) && !r.code.toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a, b) => {
+    const av = a[sortK] ?? 0, bv = b[sortK] ?? 0;
+    return typeof av === 'string' ? av.localeCompare(bv) * sortD : (av - bv) * sortD;
+  });
+}
+
+function render() {
+  const rows = getRows();
+  const max  = Math.max(...rows.map(r => r.score), 25);
+  document.getElementById('tbl').innerHTML = rows.map(r => {
+    const conf = CONFIRMED.has(r.code) ? '<span class="conf">✓ 確認</span>' : '';
+    const pct  = Math.round(r.score / max * 100);
+    return `<tr class="${r.tier === 1 ? 't1r' : ''}">
+      <td><strong style="font-weight:500">${r.name}</strong>${conf}</td>
+      <td style="color:var(--text2)">${r.code}</td>
+      <td>${r.sector}</td>
+      <td><span class="tb ${r.tier===1?'t1b':'t2b'}">T${r.tier}</span></td>
+      <td><span style="font-weight:500">${r.score.toFixed(1)}</span>
+          <span class="sbar"><span class="sbar-f" style="width:${pct}%"></span></span></td>
+      <td style="font-weight:500">${r.price > 0 ? r.price.toLocaleString() : '—'}</td>
+      <td style="color:var(--text2)">${r.pe > 0 ? r.pe.toFixed(1) : '—'}</td>
+      <td>${r.gm > 0 ? r.gm.toFixed(1) + '%' : '—'}</td>
+      <td style="color:var(--text2)">${r.eps !== 0 ? r.eps.toFixed(2) : '—'}</td>
+      <td>${tech(r)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="10" class="empty">沒有符合條件的資料</td></tr>';
+
+  document.getElementById('s-n').textContent   = rows.length;
+  document.getElementById('s-avg').textContent = rows.length
+    ? (rows.reduce((a, r) => a + r.score, 0) / rows.length).toFixed(1) : '—';
+  document.getElementById('s-t1').textContent  = rows.filter(r => r.tier===1 && CONFIRMED.has(r.code)).length;
+}
+
+function buildSecs() {
+  const secs = [...new Set(DATA.map(r => r.sector))].filter(Boolean).sort();
+  document.getElementById('sec-bar').innerHTML =
+    '<div class="chip active" onclick="setSec(\'all\',this)">全部產業</div>' +
+    secs.map(s => `<div class="chip" onclick="setSec('${s.replace(/'/g,"\\'")}',this)">${s}</div>`).join('');
+}
+
+function setTier(t, el) {
+  tierF = t;
+  document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+function setSec(s, el) {
+  secF = s;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+function sort(k) {
+  sortD = sortK === k ? sortD * -1 : -1;
+  sortK = k;
+  document.querySelectorAll('thead th').forEach(th => {
+    th.classList.remove('asc', 'desc');
+    if (th.getAttribute('onclick') === `sort('${k}')`) th.classList.add(sortD === -1 ? 'desc' : 'asc');
+  });
+  render();
+}
+function showErr(msg) {
+  document.getElementById('loading').style.display = 'none';
+  const e = document.getElementById('err');
+  e.style.display = 'block';
+  e.innerHTML = `<div class="err"><strong>載入失敗</strong><br>${msg}</div>`;
+  document.getElementById('sub').textContent = '連接失敗';
+}
+
+loadData();
+</script>
+</body>
+</html>
